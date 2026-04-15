@@ -34,6 +34,50 @@ help with the setup:
 > Set up Symphony for my repository based on
 > https://github.com/openai/symphony/blob/main/elixir/README.md
 
+## Local Development
+
+This repository now includes a repo-local [WORKFLOW.md](WORKFLOW.md) configured for running the
+Elixir reference implementation against this checkout.
+
+### Prerequisites
+
+- [mise](https://mise.jdx.dev/) for Erlang/Elixir toolchain management
+- a Linear personal API key exported as `LINEAR_API_KEY`
+- optional:
+  - `LINEAR_ASSIGNEE` to restrict polling to a specific assignee
+  - `SYMPHONY_WORKSPACE_ROOT` to choose where per-issue workspaces are created
+
+### Start a local development instance
+
+```bash
+git clone https://github.com/openai/symphony.git
+cd symphony/elixir
+mise trust
+mise install
+mise exec -- mix setup
+mise exec -- mix build
+mise exec -- ./bin/symphony ../WORKFLOW.md
+```
+
+The repo-level `WORKFLOW.md` uses the existing [`.codex/worktree_init.sh`](.codex/worktree_init.sh)
+bootstrap script, so each issue workspace clones this repository and runs the Elixir setup flow
+automatically.
+
+### Optional dashboard
+
+Start the observability UI on `http://127.0.0.1:4000`:
+
+```bash
+cd symphony/elixir
+mise exec -- ./bin/symphony --port 4000 ../WORKFLOW.md
+```
+
+### Development loop
+
+- edit the implementation under [elixir/](elixir)
+- validate targeted changes with `mise exec -- mix test ...`
+- run the broader gate with `make -C elixir all`
+
 ---
 
 ## License

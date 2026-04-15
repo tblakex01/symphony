@@ -115,6 +115,34 @@ defmodule SymphonyElixir.CoreTest do
     assert Config.workflow_prompt() == prompt
   end
 
+  test "repo root WORKFLOW.md is valid and complete" do
+    root_workflow_path = Path.expand("../WORKFLOW.md", File.cwd!())
+
+    assert {:ok, %{config: config, prompt: prompt}} = Workflow.load(root_workflow_path)
+    assert is_map(config)
+
+    tracker = Map.get(config, "tracker", %{})
+    assert is_map(tracker)
+    assert Map.get(tracker, "kind") == "linear"
+    assert Map.get(tracker, "api_key") == "$LINEAR_API_KEY"
+    assert Map.get(tracker, "assignee") == "$LINEAR_ASSIGNEE"
+    assert is_binary(Map.get(tracker, "project_slug"))
+    assert is_list(Map.get(tracker, "active_states"))
+    assert is_list(Map.get(tracker, "terminal_states"))
+
+    workspace = Map.get(config, "workspace", %{})
+    assert is_map(workspace)
+    assert Map.get(workspace, "root") == "$SYMPHONY_WORKSPACE_ROOT"
+
+    hooks = Map.get(config, "hooks", %{})
+    assert is_map(hooks)
+    assert Map.get(hooks, "after_create") =~ "git clone --depth 1 https://github.com/openai/symphony.git ."
+    assert Map.get(hooks, "after_create") =~ "bash ./.codex/worktree_init.sh"
+    assert Map.get(hooks, "before_remove") =~ "cd elixir && mise exec -- mix workspace.before_remove"
+
+    assert String.trim(prompt) != ""
+  end
+
   test "linear api token resolves from LINEAR_API_KEY env var" do
     previous_linear_api_key = System.get_env("LINEAR_API_KEY")
     env_api_key = "test-linear-api-key"
