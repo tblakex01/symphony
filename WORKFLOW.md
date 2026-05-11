@@ -34,6 +34,13 @@ codex:
   thread_sandbox: workspace-write
   turn_sandbox_policy:
     type: workspaceWrite
+    writableRoots:
+      - $SYMPHONY_WORKSPACE_ROOT
+    readOnlyAccess:
+      type: fullAccess
+    networkAccess: true
+    excludeTmpdirEnvVar: false
+    excludeSlashTmp: false
 ---
 
 You are working on a Linear ticket `{{ issue.identifier }}`

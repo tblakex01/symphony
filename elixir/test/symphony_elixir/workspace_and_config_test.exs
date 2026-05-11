@@ -1170,6 +1170,75 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
              SymphonyElixir.PathSafety.canonicalize(path)
   end
 
+  test "runtime sandbox policy expands env-backed writable roots in explicit policies" do
+    previous_workspace_root = System.get_env("SYMPHONY_WORKSPACE_ROOT")
+
+    workspace_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-runtime-sandbox-env-root-#{System.unique_integer([:positive])}"
+      )
+
+    on_exit(fn -> restore_env("SYMPHONY_WORKSPACE_ROOT", previous_workspace_root) end)
+    System.put_env("SYMPHONY_WORKSPACE_ROOT", workspace_root)
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      codex_turn_sandbox_policy: %{
+        type: "workspaceWrite",
+        writableRoots: ["$SYMPHONY_WORKSPACE_ROOT"],
+        networkAccess: true,
+        readOnlyAccess: %{type: "fullAccess"}
+      }
+    )
+
+    assert {:ok, runtime_settings} = Config.codex_runtime_settings(Path.join(workspace_root, "AGE-7"))
+
+    assert runtime_settings.turn_sandbox_policy == %{
+             "type" => "workspaceWrite",
+             "writableRoots" => [Path.expand(workspace_root)],
+             "networkAccess" => true,
+             "readOnlyAccess" => %{"type" => "fullAccess"}
+           }
+  end
+
+  test "runtime sandbox policy reports missing env-backed writable roots" do
+    previous_workspace_root = System.get_env("SYMPHONY_WORKSPACE_ROOT")
+
+    on_exit(fn -> restore_env("SYMPHONY_WORKSPACE_ROOT", previous_workspace_root) end)
+    System.delete_env("SYMPHONY_WORKSPACE_ROOT")
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      codex_turn_sandbox_policy: %{
+        type: "workspaceWrite",
+        writableRoots: ["$SYMPHONY_WORKSPACE_ROOT"]
+      }
+    )
+
+    assert {:error, {:missing_turn_sandbox_writable_root_env, "SYMPHONY_WORKSPACE_ROOT"}} =
+             Config.codex_runtime_settings("/tmp/symphony-workspaces/AGE-8")
+
+    System.put_env("SYMPHONY_WORKSPACE_ROOT", "")
+
+    assert {:error, {:missing_turn_sandbox_writable_root_env, "SYMPHONY_WORKSPACE_ROOT"}} =
+             Config.codex_runtime_settings("/tmp/symphony-workspaces/AGE-8")
+  end
+
+  test "runtime sandbox policy preserves non-list explicit writable roots" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      codex_turn_sandbox_policy: %{
+        type: "futureSandbox",
+        writableRoots: "future-value"
+      }
+    )
+
+    assert {:ok, runtime_settings} = Config.codex_runtime_settings("/tmp/symphony-workspaces/AGE-9")
+
+    assert runtime_settings.turn_sandbox_policy == %{
+             "type" => "futureSandbox",
+             "writableRoots" => "future-value"
+           }
+  end
+
   test "runtime sandbox policy resolution defaults when omitted and ignores workspace for explicit policies" do
     test_root =
       Path.join(

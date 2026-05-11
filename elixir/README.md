@@ -62,8 +62,15 @@ mise trust
 mise install
 mise exec -- mix setup
 mise exec -- mix build
-mise exec -- ./bin/symphony ./WORKFLOW.md
+mise exec -- ./bin/symphony \
+  --i-understand-that-this-will-be-running-without-the-usual-guardrails \
+  ./WORKFLOW.md
 ```
+
+When running this repository's root workflow for local demos, prefer
+`../scripts/run_symphony_dashboard.sh` from the repository root. That helper loads `.env`, runs the
+preflight checks, prepares the Elixir runtime, and starts the dashboard on
+`http://127.0.0.1:4000/`.
 
 ## Configuration
 
@@ -79,6 +86,8 @@ Optional flags:
 
 - `--logs-root` tells Symphony to write logs under a different directory (default: `./log`)
 - `--port` also starts the Phoenix observability service (default: disabled)
+- `--i-understand-that-this-will-be-running-without-the-usual-guardrails` is required for local
+  unattended runs
 
 The `WORKFLOW.md` file uses YAML front matter for configuration, plus a Markdown body used as the
 Codex session prompt.
@@ -117,8 +126,9 @@ Notes:
 - Supported `codex.approval_policy` values depend on the targeted Codex app-server version. In the current local Codex schema, string values include `untrusted`, `on-failure`, `on-request`, and `never`, and object-form `reject` is also supported.
 - Supported `codex.thread_sandbox` values: `read-only`, `workspace-write`, `danger-full-access`.
 - When `codex.turn_sandbox_policy` is set explicitly, Symphony passes the map through to Codex
-  unchanged. Compatibility then depends on the targeted Codex app-server version rather than local
-  Symphony validation.
+  unchanged except for environment-backed entries in `writableRoots`, such as
+  `$SYMPHONY_WORKSPACE_ROOT`, which are resolved at runtime. Compatibility then depends on the
+  targeted Codex app-server version rather than local Symphony validation.
 - `agent.max_turns` caps how many back-to-back Codex turns Symphony will run in a single agent
   invocation when a turn completes normally but the issue is still in an active state. Default: `20`.
 - If the Markdown body is blank, Symphony uses a default prompt template that includes the issue
