@@ -42,6 +42,9 @@ coverage/
 .nuxt/
 .vite/
 
+# Rust
+target/
+
 # Editor and OS files
 .DS_Store
 Thumbs.db
