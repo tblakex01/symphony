@@ -1,0 +1,57 @@
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+.secrets
+.credentials
+
+# Symphony / Codex local runtime artifacts
+status.txt
+.codex/original-user-prompt.txt
+symphony-workspaces/
+workspaces/
+
+# Elixir / Erlang
+_build/
+deps/
+cover/
+doc/
+tmp/
+log/
+logs/
+priv/static/assets/
+erl_crash.dump
+.elixir_ls/
+.fetch/
+.rebar3/
+*.ez
+*.beam
+symphony_elixir-*.tar
+elixir/bin/
+
+# JavaScript / frontend tooling
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+build/
+coverage/
+.next/
+.nuxt/
+.vite/
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Generic temporary files
+*.log
+*.tmp
+*.temp

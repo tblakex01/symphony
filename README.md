@@ -50,7 +50,7 @@ Elixir reference implementation against this checkout.
 ### Start a local development instance
 
 ```bash
-git clone https://github.com/openai/symphony.git
+git clone https://github.com/tblakex01/symphony.git
 cd symphony/elixir
 mise trust
 mise install

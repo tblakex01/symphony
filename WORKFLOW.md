@@ -3,7 +3,7 @@ tracker:
   kind: linear
   api_key: $LINEAR_API_KEY
   assignee: $LINEAR_ASSIGNEE
-  project_slug: "symphony-0c79b11b75ea"
+  project_slug: "symphony-0bea678f85e7"
   active_states:
     - Todo
     - In Progress
@@ -21,7 +21,7 @@ workspace:
   root: $SYMPHONY_WORKSPACE_ROOT
 hooks:
   after_create: |
-    git clone --depth 1 https://github.com/openai/symphony.git .
+    git clone --depth 1 https://github.com/tblakex01/symphony.git .
     bash ./.codex/worktree_init.sh
   before_remove: |
     cd elixir && mise exec -- mix workspace.before_remove
