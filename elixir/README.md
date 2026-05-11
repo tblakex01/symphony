@@ -65,6 +65,15 @@ mise exec -- mix build
 mise exec -- ./bin/symphony ./WORKFLOW.md
 ```
 
+To launch the same local service with the optional dashboard, keep the setup above and replace only
+the final command with:
+
+```bash
+mise exec -- ./bin/symphony --port 4000 ./WORKFLOW.md
+```
+
+The dashboard is then available at `http://127.0.0.1:4000`.
+
 ## Configuration
 
 Pass a custom workflow file path to `./bin/symphony` when starting the service:

@@ -100,11 +100,12 @@ query IssueByKey($key: String!) {
     url
     description
     updatedAt
-    links {
+    attachments {
       nodes {
         id
         url
         title
+        sourceType
       }
     }
   }
