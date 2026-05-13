@@ -63,7 +63,7 @@ defmodule SymphonyElixir.Config do
 
   @spec codex_turn_sandbox_policy(Path.t() | nil) :: map()
   def codex_turn_sandbox_policy(workspace \\ nil) do
-    case Schema.resolve_runtime_turn_sandbox_policy(settings!(), workspace) do
+    case Schema.resolve_runtime_turn_sandbox_policy(settings!(), workspace, runtime_path_opts()) do
       {:ok, policy} ->
         policy
 
@@ -103,7 +103,7 @@ defmodule SymphonyElixir.Config do
   def codex_runtime_settings(workspace \\ nil, opts \\ []) do
     with {:ok, settings} <- settings() do
       with {:ok, turn_sandbox_policy} <-
-             Schema.resolve_runtime_turn_sandbox_policy(settings, workspace, opts) do
+             Schema.resolve_runtime_turn_sandbox_policy(settings, workspace, Keyword.merge(runtime_path_opts(), opts)) do
         {:ok,
          %{
            approval_policy: settings.codex.approval_policy,
@@ -112,6 +112,10 @@ defmodule SymphonyElixir.Config do
          }}
       end
     end
+  end
+
+  defp runtime_path_opts do
+    [path_base: Workflow.workflow_file_path() |> Path.expand() |> Path.dirname()]
   end
 
   defp validate_semantics(settings) do
