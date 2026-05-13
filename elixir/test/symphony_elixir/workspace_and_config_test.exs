@@ -1115,9 +1115,33 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
              "excludeTmpdirEnvVar" => false,
              "excludeSlashTmp" => false
            }
+
+    previous_remote_root = System.get_env("SYMPHONY_REMOTE_WORKSPACE_ROOT")
+    on_exit(fn -> restore_env("SYMPHONY_REMOTE_WORKSPACE_ROOT", previous_remote_root) end)
+    System.put_env("SYMPHONY_REMOTE_WORKSPACE_ROOT", "/local/only")
+
+    assert {:ok, explicit_remote_policy} =
+             Schema.resolve_runtime_turn_sandbox_policy(
+               %Schema{
+                 codex: %Codex{
+                   turn_sandbox_policy: %{
+                     "type" => "workspaceWrite",
+                     "writableRoots" => ["$SYMPHONY_REMOTE_WORKSPACE_ROOT"]
+                   }
+                 },
+                 workspace: %Schema.Workspace{root: "~/.symphony-workspaces"}
+               },
+               nil,
+               remote: true
+             )
+
+    assert explicit_remote_policy == %{
+             "type" => "workspaceWrite",
+             "writableRoots" => ["$SYMPHONY_REMOTE_WORKSPACE_ROOT"]
+           }
   end
 
-  test "runtime sandbox policy resolution passes explicit policies through unchanged" do
+  test "runtime sandbox policy resolution expands explicit local writable roots" do
     test_root =
       Path.join(
         System.tmp_dir!(),
@@ -1142,7 +1166,9 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
 
       assert runtime_settings.turn_sandbox_policy == %{
                "type" => "workspaceWrite",
-               "writableRoots" => ["relative/path"],
+               "writableRoots" => [
+                 Path.expand("relative/path", Path.dirname(Workflow.workflow_file_path()))
+               ],
                "networkAccess" => true
              }
 
@@ -1205,6 +1231,28 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
            }
   end
 
+  test "runtime sandbox policy expands relative env-backed writable roots from workflow directory" do
+    previous_workspace_root = System.get_env("SYMPHONY_WORKSPACE_ROOT")
+    on_exit(fn -> restore_env("SYMPHONY_WORKSPACE_ROOT", previous_workspace_root) end)
+    System.put_env("SYMPHONY_WORKSPACE_ROOT", "relative-workspaces")
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      codex_turn_sandbox_policy: %{
+        type: "workspaceWrite",
+        writableRoots: ["$SYMPHONY_WORKSPACE_ROOT"]
+      }
+    )
+
+    assert {:ok, runtime_settings} = Config.codex_runtime_settings("/tmp/symphony-workspaces/AGE-7")
+
+    assert runtime_settings.turn_sandbox_policy == %{
+             "type" => "workspaceWrite",
+             "writableRoots" => [
+               Path.expand("relative-workspaces", Path.dirname(Workflow.workflow_file_path()))
+             ]
+           }
+  end
+
   test "runtime sandbox policy reports missing env-backed writable roots" do
     previous_workspace_root = System.get_env("SYMPHONY_WORKSPACE_ROOT")
 
@@ -1225,6 +1273,35 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
 
     assert {:error, {:missing_turn_sandbox_writable_root_env, "SYMPHONY_WORKSPACE_ROOT"}} =
              Config.codex_runtime_settings("/tmp/symphony-workspaces/AGE-8")
+  end
+
+  test "runtime sandbox policy rejects malformed env-backed writable roots" do
+    for root <- ["$", "$1FOO", "$FOO-BAR"] do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        codex_turn_sandbox_policy: %{
+          type: "workspaceWrite",
+          writableRoots: [root]
+        }
+      )
+
+      assert {:error, {:invalid_turn_sandbox_writable_root_env, ^root}} =
+               Config.codex_runtime_settings("/tmp/symphony-workspaces/AGE-8")
+
+      assert {:error, {:invalid_turn_sandbox_writable_root_env, ^root}} =
+               Schema.resolve_runtime_turn_sandbox_policy(
+                 %Schema{
+                   codex: %Codex{
+                     turn_sandbox_policy: %{
+                       "type" => "workspaceWrite",
+                       "writableRoots" => [root]
+                     }
+                   },
+                   workspace: %Schema.Workspace{root: "/tmp/symphony-workspaces"}
+                 },
+                 nil,
+                 remote: true
+               )
+    end
   end
 
   test "runtime sandbox policy preserves non-list explicit writable roots" do

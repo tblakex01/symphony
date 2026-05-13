@@ -49,9 +49,8 @@ github_repo_from_url() {
 
   local owner="${path%%/*}"
   local repo="${path#*/}"
-  repo="${repo%%/*}"
 
-  if [ -z "$owner" ] || [ -z "$repo" ] || [ "$owner" = "$repo" ]; then
+  if [ -z "$owner" ] || [ -z "$repo" ] || [[ "$repo" == */* ]]; then
     return 1
   fi
 

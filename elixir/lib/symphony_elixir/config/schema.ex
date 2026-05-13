@@ -10,6 +10,7 @@ defmodule SymphonyElixir.Config.Schema do
   @primary_key false
 
   @type t :: %__MODULE__{}
+  @env_name_pattern ~r/^[A-Za-z_][A-Za-z0-9_]*$/
 
   defmodule StringOrMap do
     @moduledoc false
@@ -457,7 +458,7 @@ defmodule SymphonyElixir.Config.Schema do
   end
 
   defp env_reference_name("$" <> env_name) do
-    if String.match?(env_name, ~r/^[A-Za-z_][A-Za-z0-9_]*$/) do
+    if valid_env_reference_name?(env_name) do
       {:ok, env_name}
     else
       :error
@@ -465,6 +466,8 @@ defmodule SymphonyElixir.Config.Schema do
   end
 
   defp env_reference_name(_value), do: :error
+
+  defp valid_env_reference_name?(env_name), do: String.match?(env_name, @env_name_pattern)
 
   defp resolve_env_token(env_name) do
     case System.get_env(env_name) do
@@ -534,26 +537,53 @@ defmodule SymphonyElixir.Config.Schema do
   defp resolve_explicit_writable_roots(roots, _opts), do: {:ok, roots}
 
   defp resolve_explicit_writable_root("$" <> env_name = token, opts) do
-    if String.match?(env_name, ~r/^[A-Za-z_][A-Za-z0-9_]*$/) do
-      case System.get_env(env_name) do
-        nil ->
-          {:error, {:missing_turn_sandbox_writable_root_env, env_name}}
+    with :ok <- validate_turn_sandbox_writable_root_env_token(env_name, token) do
+      if Keyword.get(opts, :remote, false) do
+        {:ok, token}
+      else
+        case System.get_env(env_name) do
+          nil ->
+            missing_turn_sandbox_writable_root_env(env_name)
 
-        "" ->
-          {:error, {:missing_turn_sandbox_writable_root_env, env_name}}
+          "" ->
+            missing_turn_sandbox_writable_root_env(env_name)
 
-        value ->
-          {:ok, maybe_expand_local_writable_root(value, opts)}
+          value ->
+            {:ok, maybe_expand_local_writable_root(value, opts)}
+        end
       end
-    else
-      {:ok, token}
     end
   end
 
+  defp resolve_explicit_writable_root(root, opts) when is_binary(root),
+    do: {:ok, maybe_expand_local_writable_root(root, opts)}
+
   defp resolve_explicit_writable_root(root, _opts), do: {:ok, root}
 
+  defp missing_turn_sandbox_writable_root_env(env_name),
+    do: {:error, {:missing_turn_sandbox_writable_root_env, env_name}}
+
+  defp validate_turn_sandbox_writable_root_env_token(env_name, token)
+       when is_binary(env_name) and env_name != "" do
+    if valid_env_reference_name?(env_name) do
+      :ok
+    else
+      invalid_turn_sandbox_writable_root_env(token)
+    end
+  end
+
+  defp validate_turn_sandbox_writable_root_env_token(_env_name, token),
+    do: invalid_turn_sandbox_writable_root_env(token)
+
+  defp invalid_turn_sandbox_writable_root_env(token),
+    do: {:error, {:invalid_turn_sandbox_writable_root_env, token}}
+
   defp maybe_expand_local_writable_root(root, opts) when is_binary(root) do
-    if Keyword.get(opts, :remote, false), do: root, else: Path.expand(root)
+    if Keyword.get(opts, :remote, false) do
+      root
+    else
+      Path.expand(root, Keyword.get(opts, :path_base, File.cwd!()))
+    end
   end
 
   defp default_workspace_root(workspace, _fallback) when is_binary(workspace) and workspace != "",
