@@ -534,19 +534,24 @@ defmodule SymphonyElixir.Config.Schema do
   defp resolve_explicit_writable_roots(roots, _opts), do: {:ok, roots}
 
   defp resolve_explicit_writable_root("$" <> env_name = token, opts) do
-    if String.match?(env_name, ~r/^[A-Za-z_][A-Za-z0-9_]*$/) do
-      case System.get_env(env_name) do
-        nil ->
-          {:error, {:missing_turn_sandbox_writable_root_env, env_name}}
+    cond do
+      Keyword.get(opts, :remote, false) ->
+        {:ok, token}
 
-        "" ->
-          {:error, {:missing_turn_sandbox_writable_root_env, env_name}}
+      String.match?(env_name, ~r/^[A-Za-z_][A-Za-z0-9_]*$/) ->
+        case System.get_env(env_name) do
+          nil ->
+            missing_turn_sandbox_writable_root_env(env_name)
 
-        value ->
-          {:ok, maybe_expand_local_writable_root(value, opts)}
-      end
-    else
-      {:ok, maybe_expand_local_writable_root(token, opts)}
+          "" ->
+            missing_turn_sandbox_writable_root_env(env_name)
+
+          value ->
+            {:ok, maybe_expand_local_writable_root(value, opts)}
+        end
+
+      true ->
+        {:ok, maybe_expand_local_writable_root(token, opts)}
     end
   end
 
@@ -554,6 +559,9 @@ defmodule SymphonyElixir.Config.Schema do
     do: {:ok, maybe_expand_local_writable_root(root, opts)}
 
   defp resolve_explicit_writable_root(root, _opts), do: {:ok, root}
+
+  defp missing_turn_sandbox_writable_root_env(env_name),
+    do: {:error, {:missing_turn_sandbox_writable_root_env, env_name}}
 
   defp maybe_expand_local_writable_root(root, opts) when is_binary(root) do
     if Keyword.get(opts, :remote, false) do

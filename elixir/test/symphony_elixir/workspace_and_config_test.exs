@@ -1115,6 +1115,30 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
              "excludeTmpdirEnvVar" => false,
              "excludeSlashTmp" => false
            }
+
+    previous_remote_root = System.get_env("SYMPHONY_REMOTE_WORKSPACE_ROOT")
+    on_exit(fn -> restore_env("SYMPHONY_REMOTE_WORKSPACE_ROOT", previous_remote_root) end)
+    System.put_env("SYMPHONY_REMOTE_WORKSPACE_ROOT", "/local/only")
+
+    assert {:ok, explicit_remote_policy} =
+             Schema.resolve_runtime_turn_sandbox_policy(
+               %Schema{
+                 codex: %Codex{
+                   turn_sandbox_policy: %{
+                     "type" => "workspaceWrite",
+                     "writableRoots" => ["$SYMPHONY_REMOTE_WORKSPACE_ROOT"]
+                   }
+                 },
+                 workspace: %Schema.Workspace{root: "~/.symphony-workspaces"}
+               },
+               nil,
+               remote: true
+             )
+
+    assert explicit_remote_policy == %{
+             "type" => "workspaceWrite",
+             "writableRoots" => ["$SYMPHONY_REMOTE_WORKSPACE_ROOT"]
+           }
   end
 
   test "runtime sandbox policy resolution expands explicit local writable roots" do
