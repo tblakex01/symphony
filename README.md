@@ -42,35 +42,43 @@ Elixir reference implementation against this checkout.
 ### Prerequisites
 
 - [mise](https://mise.jdx.dev/) for Erlang/Elixir toolchain management
-- a Linear personal API key exported as `LINEAR_API_KEY`
+- [GitHub CLI](https://cli.github.com/) authenticated for the writable fork
+- a Linear personal API key in `.env` or exported as `LINEAR_API_KEY`
 - optional:
   - `LINEAR_ASSIGNEE` to restrict polling to a specific assignee
   - `SYMPHONY_WORKSPACE_ROOT` to choose where per-issue workspaces are created
 
 ### Start a local development instance
 
+Use the repo helper as the canonical local startup path:
+
 ```bash
 git clone https://github.com/tblakex01/symphony.git
-cd symphony/elixir
-mise trust
-mise install
-mise exec -- mix setup
-mise exec -- mix build
-mise exec -- ./bin/symphony ../WORKFLOW.md
+cd symphony
+scripts/run_symphony_dashboard.sh
 ```
 
 The repo-level `WORKFLOW.md` uses the existing [`.codex/worktree_init.sh`](.codex/worktree_init.sh)
 bootstrap script, so each issue workspace clones this repository and runs the Elixir setup flow
 automatically.
 
-### Optional dashboard
+The helper loads `.env`, verifies Linear/GitHub/mise/remotes with
+[`scripts/preflight.sh`](scripts/preflight.sh), builds the Elixir CLI, and starts the observability
+UI at `http://127.0.0.1:4000/`.
 
-Start the observability UI on `http://127.0.0.1:4000`:
+For debugging, the raw dashboard command is:
 
 ```bash
 cd symphony/elixir
-mise exec -- ./bin/symphony --port 4000 ../WORKFLOW.md
+mise exec -- ./bin/symphony \
+  --i-understand-that-this-will-be-running-without-the-usual-guardrails \
+  --port 4000 \
+  ../WORKFLOW.md
 ```
+
+`WORKFLOW.md` enables worker network access and writable access to `$SYMPHONY_WORKSPACE_ROOT` so
+spawned agents can push branches, create or update PRs, read PR checks and review comments, and
+finish the Linear handoff without a parent session doing GitHub work manually.
 
 ### Development loop
 

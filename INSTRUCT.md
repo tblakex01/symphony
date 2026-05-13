@@ -13,7 +13,8 @@ root.
 - A repository that is ready for unattended coding-agent work: deterministic setup, tests, and clear
   contribution rules.
 - `mise` for the Elixir/Erlang toolchain.
-- A Linear personal API key exported as `LINEAR_API_KEY`.
+- GitHub CLI (`gh`) authenticated for the writable fork.
+- A Linear personal API key in `.env` or exported as `LINEAR_API_KEY`.
 - A Linear project slug configured in `WORKFLOW.md`.
 - Optional environment:
   - `LINEAR_ASSIGNEE` to restrict polling to work assigned to one person or bot.
@@ -36,6 +37,10 @@ Edit `WORKFLOW.md` when you need to change orchestration behavior. Keep all runt
 - `hooks.before_remove` runs cleanup before terminal-state workspaces are removed.
 - `agent.max_concurrent_agents` and `agent.max_turns` bound parallelism and retry depth.
 - `codex.command`, `codex.approval_policy`, and sandbox fields define how Codex is launched.
+- `codex.turn_sandbox_policy` must allow spawned workers to use the workspace root and GitHub
+  network access. This repo's workflow uses `$SYMPHONY_WORKSPACE_ROOT` as the writable root,
+  `readOnlyAccess: fullAccess` for local auth/config reads, and `networkAccess: true` for PR
+  publishing and review checks.
 - The Markdown body is the prompt template rendered for each Linear issue.
 
 Do not create a second workflow file for the same behavior unless you are deliberately changing the
@@ -43,34 +48,66 @@ workflow contract. Keep business rules and state-transition policy in one place.
 
 ## Run Symphony Locally
 
-From a fresh checkout:
+Use the helper as the canonical local path. It loads `.env`, defaults
+`SYMPHONY_WORKSPACE_ROOT` to `./symphony-workspaces` when unset, verifies Linear/GitHub/mise/remotes,
+builds the Elixir CLI, and starts the dashboard.
 
 ```bash
-cd symphony/elixir
+cd symphony
+scripts/run_symphony_dashboard.sh
+```
+
+The dashboard is available at `http://127.0.0.1:4000/`.
+
+To run only the preflight:
+
+```bash
+cd symphony
+scripts/preflight.sh
+```
+
+For debugging, the helper's raw equivalent is:
+
+```bash
+cd symphony
+set -a
+source .env
+set +a
+export SYMPHONY_WORKSPACE_ROOT="${SYMPHONY_WORKSPACE_ROOT:-$PWD/symphony-workspaces}"
+cd elixir
 mise trust
 mise install
 mise exec -- mix setup
 mise exec -- mix build
-export LINEAR_API_KEY=lin_api_...
-export SYMPHONY_WORKSPACE_ROOT="$HOME/code/symphony-workspaces"
-mise exec -- ./bin/symphony ../WORKFLOW.md
+mise exec -- ./bin/symphony \
+  --i-understand-that-this-will-be-running-without-the-usual-guardrails \
+  --port 4000 \
+  ../WORKFLOW.md
 ```
 
-To restrict polling to one assignee:
+To restrict polling to one assignee, put `LINEAR_ASSIGNEE=<linear-user-or-bot-id>` in `.env` before
+running the helper.
 
-```bash
-export LINEAR_ASSIGNEE=your-linear-user-or-bot-id
-mise exec -- ./bin/symphony ../WORKFLOW.md
-```
+The acknowledgement flag is required by the local CLI because Symphony launches Codex without the
+usual interactive guardrails.
 
-To enable the dashboard:
+## Automation Preflight
 
-```bash
-mise exec -- ./bin/symphony --port 4000 ../WORKFLOW.md
-```
+`scripts/preflight.sh` fails fast before a demo run if any required automation dependency is
+missing:
 
-Then open `http://127.0.0.1:4000` and watch active sessions, retries, token counts, and issue
-state.
+- `LINEAR_API_KEY` is exported and accepted by Linear's GraphQL API.
+- `origin` is a writable GitHub fork, not `openai/symphony`.
+- `upstream`, when configured, points to `openai/symphony`.
+- `gh auth status` works for GitHub.
+- `git ls-remote origin HEAD` and a `git push --dry-run` to a temporary branch both succeed.
+- `mise` is available and the Elixir `mise.toml` is trusted.
+- dashboard port `4000` is free, unless `SYMPHONY_DASHBOARD_PORT` chooses another port.
+- root `WORKFLOW.md` includes the network-enabled worker sandbox contract.
+
+If preflight passes, spawned workers should be able to implement, validate, push branches, create or
+update PRs, read PR checks/comments, attach PRs to Linear, and move issues to `Human Review`
+without parent-session intervention.
 
 ## Normal Operating Loop
 
@@ -122,10 +159,8 @@ moves the issue to `Human Review` when the workflow quality bar is met.
 ### 2. Start Symphony
 
 ```bash
-cd symphony/elixir
-export LINEAR_API_KEY=lin_api_...
-export SYMPHONY_WORKSPACE_ROOT="$HOME/code/symphony-workspaces"
-mise exec -- ./bin/symphony --port 4000 ../WORKFLOW.md
+cd symphony
+scripts/run_symphony_dashboard.sh
 ```
 
 Expected result: the terminal logs and dashboard show the issue as claimed and running. The
@@ -154,10 +189,17 @@ move the issue toward completion according to `WORKFLOW.md`.
 
 - If no work starts, confirm `LINEAR_API_KEY`, `tracker.project_slug`, active issue state, and
   optional `LINEAR_ASSIGNEE`.
+- If preflight fails GitHub auth, run `gh auth login` for the account that can write to the fork.
+- If preflight fails the push dry run, confirm `origin` points to the fork and run
+  `gh auth setup-git` if Git credential helper integration is missing.
 - If a workspace fails to bootstrap, inspect `hooks.after_create` output and
   `.codex/worktree_init.sh`.
-- If Codex cannot update Linear, confirm the app-server session exposes Linear access. This repo's
-  workflow expects either the Linear MCP integration or Symphony's `linear_graphql` tool.
+- If Codex cannot update Linear, confirm the app-server session exposes Symphony's
+  `linear_graphql` tool and that `LINEAR_API_KEY` is loaded into the Symphony process.
+- If a worker implements the change but cannot push or inspect PR feedback, rerun
+  `scripts/preflight.sh`; the usual causes are missing `gh` auth, a read-only `origin`, blocked
+  network access, or a worker sandbox that no longer includes `$SYMPHONY_WORKSPACE_ROOT` and
+  `networkAccess: true`.
 - If the dashboard is unavailable, restart with `--port 4000` and check that no other local service
   is using that port.
 - If an issue is terminal, Symphony should stop active work and clean the matching workspace.

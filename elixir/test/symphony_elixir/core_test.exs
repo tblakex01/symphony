@@ -105,10 +105,18 @@ defmodule SymphonyElixir.CoreTest do
 
     hooks = Map.get(config, "hooks", %{})
     assert is_map(hooks)
-    assert Map.get(hooks, "after_create") =~ "git clone --depth 1 https://github.com/openai/symphony ."
-    assert Map.get(hooks, "after_create") =~ "cd elixir && mise trust"
-    assert Map.get(hooks, "after_create") =~ "mise exec -- mix deps.get"
+
+    assert Map.get(hooks, "after_create") =~
+             ~r/git clone --depth 1 https:\/\/github\.com\/[^\/]+\/symphony(\.git)? \./
+
+    assert Map.get(hooks, "after_create") =~ "mise trust"
+    assert Map.get(hooks, "after_create") =~ "mix deps.get"
     assert Map.get(hooks, "before_remove") =~ "cd elixir && mise exec -- mix workspace.before_remove"
+
+    policy = get_in(config, ["codex", "turn_sandbox_policy"])
+    assert policy["type"] == "workspaceWrite"
+    assert policy["networkAccess"] == true
+    assert policy["readOnlyAccess"] == %{"type" => "fullAccess"}
 
     assert String.trim(prompt) != ""
     assert is_binary(Config.workflow_prompt())
@@ -136,9 +144,18 @@ defmodule SymphonyElixir.CoreTest do
 
     hooks = Map.get(config, "hooks", %{})
     assert is_map(hooks)
-    assert Map.get(hooks, "after_create") =~ "git clone --depth 1 https://github.com/openai/symphony.git ."
+
+    assert Map.get(hooks, "after_create") =~
+             ~r/git clone --depth 1 https:\/\/github\.com\/[^\/]+\/symphony(\.git)? \./
+
     assert Map.get(hooks, "after_create") =~ "bash ./.codex/worktree_init.sh"
     assert Map.get(hooks, "before_remove") =~ "cd elixir && mise exec -- mix workspace.before_remove"
+
+    policy = get_in(config, ["codex", "turn_sandbox_policy"])
+    assert policy["type"] == "workspaceWrite"
+    assert policy["writableRoots"] == ["$SYMPHONY_WORKSPACE_ROOT"]
+    assert policy["networkAccess"] == true
+    assert policy["readOnlyAccess"] == %{"type" => "fullAccess"}
 
     assert String.trim(prompt) != ""
   end
@@ -1694,7 +1711,7 @@ defmodule SymphonyElixir.CoreTest do
 
       write_workflow_file!(Workflow.workflow_file_path(),
         workspace_root: workspace_root,
-        codex_command: "#{codex_binary} --config 'model=\"gpt-5.5\"' app-server"
+        codex_command: "#{codex_binary} --model gpt-5.3-codex app-server"
       )
 
       issue = %Issue{
@@ -1713,7 +1730,7 @@ defmodule SymphonyElixir.CoreTest do
       lines = String.split(trace, "\n", trim: true)
 
       assert argv_line = Enum.find(lines, fn line -> String.starts_with?(line, "ARGV:") end)
-      assert String.contains?(argv_line, "--config model=\"gpt-5.5\" app-server")
+      assert String.contains?(argv_line, "--model gpt-5.3-codex app-server")
       refute String.contains?(argv_line, "--ask-for-approval never")
       refute String.contains?(argv_line, "--sandbox danger-full-access")
     after
