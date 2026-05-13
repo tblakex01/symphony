@@ -1275,6 +1275,35 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
              Config.codex_runtime_settings("/tmp/symphony-workspaces/AGE-8")
   end
 
+  test "runtime sandbox policy rejects malformed env-backed writable roots" do
+    for root <- ["$", "$1FOO", "$FOO-BAR"] do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        codex_turn_sandbox_policy: %{
+          type: "workspaceWrite",
+          writableRoots: [root]
+        }
+      )
+
+      assert {:error, {:invalid_turn_sandbox_writable_root_env, ^root}} =
+               Config.codex_runtime_settings("/tmp/symphony-workspaces/AGE-8")
+
+      assert {:error, {:invalid_turn_sandbox_writable_root_env, ^root}} =
+               Schema.resolve_runtime_turn_sandbox_policy(
+                 %Schema{
+                   codex: %Codex{
+                     turn_sandbox_policy: %{
+                       "type" => "workspaceWrite",
+                       "writableRoots" => [root]
+                     }
+                   },
+                   workspace: %Schema.Workspace{root: "/tmp/symphony-workspaces"}
+                 },
+                 nil,
+                 remote: true
+               )
+    end
+  end
+
   test "runtime sandbox policy preserves non-list explicit writable roots" do
     write_workflow_file!(Workflow.workflow_file_path(),
       codex_turn_sandbox_policy: %{
