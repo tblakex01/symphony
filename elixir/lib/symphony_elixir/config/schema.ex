@@ -10,6 +10,7 @@ defmodule SymphonyElixir.Config.Schema do
   @primary_key false
 
   @type t :: %__MODULE__{}
+  @env_name_pattern ~r/^[A-Za-z_][A-Za-z0-9_]*$/
 
   defmodule StringOrMap do
     @moduledoc false
@@ -308,7 +309,7 @@ defmodule SymphonyElixir.Config.Schema do
   def resolve_runtime_turn_sandbox_policy(settings, workspace \\ nil, opts \\ []) do
     case settings.codex.turn_sandbox_policy do
       %{} = policy ->
-        {:ok, policy}
+        resolve_explicit_runtime_turn_sandbox_policy(policy, opts)
 
       _ ->
         workspace
@@ -457,7 +458,7 @@ defmodule SymphonyElixir.Config.Schema do
   end
 
   defp env_reference_name("$" <> env_name) do
-    if String.match?(env_name, ~r/^[A-Za-z_][A-Za-z0-9_]*$/) do
+    if valid_env_reference_name?(env_name) do
       {:ok, env_name}
     else
       :error
@@ -465,6 +466,8 @@ defmodule SymphonyElixir.Config.Schema do
   end
 
   defp env_reference_name(_value), do: :error
+
+  defp valid_env_reference_name?(env_name), do: String.match?(env_name, @env_name_pattern)
 
   defp resolve_env_token(env_name) do
     case System.get_env(env_name) do
@@ -503,6 +506,84 @@ defmodule SymphonyElixir.Config.Schema do
 
   defp default_runtime_turn_sandbox_policy(workspace_root, _opts) do
     {:error, {:unsafe_turn_sandbox_policy, {:invalid_workspace_root, workspace_root}}}
+  end
+
+  defp resolve_explicit_runtime_turn_sandbox_policy(policy, opts) do
+    case Map.fetch(policy, "writableRoots") do
+      {:ok, roots} ->
+        with {:ok, resolved_roots} <- resolve_explicit_writable_roots(roots, opts) do
+          {:ok, Map.put(policy, "writableRoots", resolved_roots)}
+        end
+
+      :error ->
+        {:ok, policy}
+    end
+  end
+
+  defp resolve_explicit_writable_roots(roots, opts) when is_list(roots) do
+    roots
+    |> Enum.reduce_while({:ok, []}, fn root, {:ok, resolved_roots} ->
+      case resolve_explicit_writable_root(root, opts) do
+        {:ok, resolved_root} -> {:cont, {:ok, [resolved_root | resolved_roots]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, resolved_roots} -> {:ok, Enum.reverse(resolved_roots)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp resolve_explicit_writable_roots(roots, _opts), do: {:ok, roots}
+
+  defp resolve_explicit_writable_root("$" <> env_name = token, opts) do
+    with :ok <- validate_turn_sandbox_writable_root_env_token(env_name, token) do
+      if Keyword.get(opts, :remote, false) do
+        {:ok, token}
+      else
+        case System.get_env(env_name) do
+          nil ->
+            missing_turn_sandbox_writable_root_env(env_name)
+
+          "" ->
+            missing_turn_sandbox_writable_root_env(env_name)
+
+          value ->
+            {:ok, maybe_expand_local_writable_root(value, opts)}
+        end
+      end
+    end
+  end
+
+  defp resolve_explicit_writable_root(root, opts) when is_binary(root),
+    do: {:ok, maybe_expand_local_writable_root(root, opts)}
+
+  defp resolve_explicit_writable_root(root, _opts), do: {:ok, root}
+
+  defp missing_turn_sandbox_writable_root_env(env_name),
+    do: {:error, {:missing_turn_sandbox_writable_root_env, env_name}}
+
+  defp validate_turn_sandbox_writable_root_env_token(env_name, token)
+       when is_binary(env_name) and env_name != "" do
+    if valid_env_reference_name?(env_name) do
+      :ok
+    else
+      invalid_turn_sandbox_writable_root_env(token)
+    end
+  end
+
+  defp validate_turn_sandbox_writable_root_env_token(_env_name, token),
+    do: invalid_turn_sandbox_writable_root_env(token)
+
+  defp invalid_turn_sandbox_writable_root_env(token),
+    do: {:error, {:invalid_turn_sandbox_writable_root_env, token}}
+
+  defp maybe_expand_local_writable_root(root, opts) when is_binary(root) do
+    if Keyword.get(opts, :remote, false) do
+      root
+    else
+      Path.expand(root, Keyword.get(opts, :path_base, File.cwd!()))
+    end
   end
 
   defp default_workspace_root(workspace, _fallback) when is_binary(workspace) and workspace != "",
